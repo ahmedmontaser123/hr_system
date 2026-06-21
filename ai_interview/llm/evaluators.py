@@ -1,12 +1,16 @@
+# ai/evaluators.py
+from llm import build_chains
+from llm.llm_interface import LLmInterface
+
 class Evaluator:
-    def __init__(self, chains: dict):
-        self.chains = chains
+    def __init__(self, llm_provider: LLmInterface ):
+        self.chains = build_chains(llm_provider)
 
     def check_relevance(self, question: str, answer: str) -> dict:
         return self.chains["relevance"].invoke({"question": question, "answer": answer})
 
-    def classify(self, question: str, answer: str) -> dict:
-        return self.chains["classification"].invoke({"question": question, "answer": answer})
+    def classify(self, question: str) -> dict:
+        return self.chains["classification"].invoke({"question": question})
 
     def route(self, question: str, answer: str, question_type: str) -> dict:
         payload = {"question": question, "answer": answer}
@@ -24,7 +28,7 @@ class Evaluator:
         if relevance.get("score", 0) < 2:
             return {"status": "not_relevant", "relevance": relevance}
 
-        classification = self.classify(question, answer)
+        classification = self.classify(question)
         question_type = classification.get("type", "behavioral")
 
         result = self.route(question, answer, question_type)

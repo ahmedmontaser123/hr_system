@@ -1,85 +1,50 @@
-from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+# interview/interview_session.py
+from audio.speech_to_text import WhisperLoader
+from llm import QuestionsGenerator
+from llm import Evaluator
 
-
-@dataclass
-class QARecord:
-    question: str
-    answer: str
-    topic: str
-    difficulty: str
-    evaluation: Dict
-    relevance: Dict
-    question_type: str
-
-
-@dataclass
 class InterviewSession:
-    candidate_name: str
-    role: str
-    description: str
+    def __init__(self, whisper: WhisperLoader, generator: QuestionsGenerator, evaluator: Evaluator):
+        self.whisper = whisper
+        self.generator = generator
+        self.evaluator = evaluator
 
-    current_topic: Optional[str] = None
-    current_difficulty: str = "Easy"
+    def start(self, role: str, description: str, num_questions: int = 5):
+        """يتكال مرة واحدة في الأول — بيولد الأسئلة"""
+        questions = []
+        for _ in range(num_questions):
+            question = self.generator.generate(role, description)
+            questions.append(question)
+        return questions
 
-    previous_topics: List[str] = field(default_factory=list)
-    history: List[QARecord] = field(default_factory=list)
-
-    def add_record(
-        self,
-        question: str,
-        answer: str,
-        topic: str,
-        difficulty: str,
-        evaluation: Dict,
-        relevance: Dict,
-        question_type: str,
-    ):
-        record = QARecord(
-            question=question,
-            answer=answer,
-            topic=topic,
-            difficulty=difficulty,
-            evaluation=evaluation,
-            relevance=relevance,
-            question_type=question_type,
-        )
-        self.history.append(record)
-
-        if topic not in self.previous_topics:
-            self.previous_topics.append(topic)
-
-    def update_next_step(self, next_topic: str, difficulty: str):
-        self.current_topic = next_topic
-        self.current_difficulty = difficulty
-
-    def get_average_score(self, key: str = "score") -> float:
-        """Average a numeric field across all evaluations (e.g. 'correctness', 'score')."""
-        scores = [
-            r.evaluation.get(key)
-            for r in self.history
-            if isinstance(r.evaluation.get(key), (int, float))
-        ]
-        return sum(scores) / len(scores) if scores else 0.0
-
-    def get_covered_topics(self) -> List[str]:
-        return self.previous_topics
-
-    def get_summary(self) -> Dict:
+    def answer(self, question: str, audio_bytes: bytes) -> dict:
+        """بياخد audio ويرجع التقييم"""
+        transcript = self.whisper.transcribe(audio_bytes)
+        evaluation = self.evaluator.process(question, transcript)
         return {
-            "candidate": self.candidate_name,
-            "role": self.role,
-            "topics_covered": self.previous_topics,
-            "total_questions": len(self.history),
-            "history": [
-                {
-                    "question": r.question,
-                    "answer": r.answer,
-                    "topic": r.topic,
-                    "difficulty": r.difficulty,
-                    "type": r.question_type,
-                    "evaluation": r.evaluation,
-                }
-                for r in self.history
-            ],
+            "question": question,
+            "transcript": transcript,
+            "evaluation": evaluation
+        }
+
+    def finish(self, results: list) -> dict:
+        """summary"""
+        evaluated = [r for r in results if r["evaluation"]["status"] == "evaluated"]
+        
+        if not evaluated:
+            return {"final_score": 0, "summary": "No valid answers"}
+
+        scores = []
+        for r in evaluated:
+            ev = r["evaluation"]["evaluation"]
+            score = sum(v for v in ev.values() if isinstance(v, (int, float)))
+            scores.append(score)
+
+        avg = sum(scores) / len(scores)
+
+        return {
+            "total_questions": len(results),
+            "evaluated": len(evaluated),
+            "final_score": round(avg, 2),
+            "results": results
         }

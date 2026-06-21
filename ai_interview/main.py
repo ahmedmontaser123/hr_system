@@ -1,88 +1,70 @@
+# main.py
 import streamlit as st
-from helpers import Settings
-from ai import LLMLoader, build_chains, Evaluator, QuestionGenerator
+from helpers import get_settings
+from llm import build_chains
+from llm import QuestionsGenerator
+from llm import Evaluator
+from llm.providers.hugging_face_providers import HuggingFaceProvider
 from audio.speech_to_text import WhisperLoader
 from interview.interview_session import InterviewSession
 
 st.title("🎤 AI Interview Assistant")
 
-
 @st.cache_resource(show_spinner="Loading models... (first time only)")
 def load_models():
-    """يتحمّل مرة واحدة فعليًا على مستوى التطبيق كله، مش لكل session."""
-    settings = Settings()
-    llm_loader = LLMLoader(settings)
-    whisper_loader = WhisperLoader(settings)
-    chains = build_chains(llm_loader)
-
+    settings = get_settings()
+    llm_provider = HuggingFaceProvider(settings)
+    whisper = WhisperLoader(settings)
+    chains = build_chains(llm_provider.get_llm())  # ← هنا الفرق
+    generator = QuestionsGenerator(chains)
     evaluator = Evaluator(chains)
-    question_generator = QuestionGenerator(chains)
+    return whisper, generator, evaluator
 
-    return evaluator, question_generator, whisper_loader
-
-
-evaluator, question_generator, whisper_loader = load_models()
+whisper, generator, evaluator = load_models()
 st.success("Models ready ✅")
 
-# بدء session جديدة
-if "interview_session" not in st.session_state:
+if "session" not in st.session_state:
     role = st.text_input("Role", "Backend Developer")
     description = st.text_area("Job Description", "Python, REST APIs, databases")
 
     if st.button("Start Interview"):
-        st.session_state.interview_session = InterviewSession(
-            candidate_name="Candidate",
-            role=role,
-            description=description,
-        )
+        session = InterviewSession(whisper, generator, evaluator)
+        questions = session.start(role, description, num_questions=5)
+        st.session_state.session = session
+        st.session_state.questions = questions
+        st.session_state.current_index = 0
+        st.session_state.results = []
         st.rerun()
 
 else:
-    session = st.session_state.interview_session
+    session = st.session_state.session
+    questions = st.session_state.questions
+    index = st.session_state.current_index
 
-    if "current_question" not in st.session_state:
-        if st.button("Generate Question"):
-            question = question_generator.generate(
-                role=session.role,
-                description=session.description,
-                topic="general",
-                difficulty=session.current_difficulty,
-                previous_topics=session.get_covered_topics(),
-            )
-            st.session_state.current_question = question
+    if index < len(questions):
+        st.progress(index / len(questions))
+        st.write(f"**Question {index + 1}/{len(questions)}:**")
+        st.write(questions[index])
+
+        audio = st.audio_input("Record your answer")
+
+        if audio and st.button("Submit Answer"):
+            with st.spinner("Processing..."):
+                result = session.answer(questions[index], audio.read())
+
+            st.write("**Your answer:**", result["transcript"])
+            st.json(result["evaluation"])
+
+            st.session_state.results.append(result)
+            st.session_state.current_index += 1
             st.rerun()
 
     else:
-        st.write("**Question:**", st.session_state.current_question)
+        st.success("Interview finished! 🎉")
+        summary = session.finish(st.session_state.results)
+        st.json(summary)
 
-        audio_file = st.file_uploader("Upload your answer (audio)", type=["wav", "mp3", "ogg"])
-
-        if audio_file and st.button("Submit Answer"):
-            with open("temp_audio.wav", "wb") as f:
-                f.write(audio_file.read())
-
-            answer_text = whisper_loader.transcribe("temp_audio.wav")
-            st.write("**Transcribed Answer:**", answer_text)
-
-            result = evaluator.process(
-                question=st.session_state.current_question,
-                answer=answer_text,
-            )
-            st.json(result)
-
-            if result["status"] == "evaluated":
-                session.add_record(
-                    question=st.session_state.current_question,
-                    answer=answer_text,
-                    topic="general",
-                    difficulty=session.current_difficulty,
-                    evaluation=result["evaluation"],
-                    relevance=result["relevance"],
-                    question_type=result["question_type"],
-                )
-
-            del st.session_state.current_question
+        if st.button("Start New Interview"):
+            for key in ["session", "questions", "current_index", "results"]:
+                del st.session_state[key]
             st.rerun()
-
-    if st.button("Show Summary"):
-        st.json(session.get_summary())
