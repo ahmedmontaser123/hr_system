@@ -1,6 +1,6 @@
 # chains.py
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
-from llm import prompts
+from . import prompts
 
 def build_chains(llm) -> dict:
     json_parser = JsonOutputParser()

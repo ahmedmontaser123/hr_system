@@ -15,9 +15,11 @@ def load_models():
     settings = get_settings()
     llm_provider = HuggingFaceProvider(settings)
     whisper = WhisperLoader(settings)
-    chains = build_chains(llm_provider.get_llm())  # ← هنا الفرق
+    chains = build_chains(llm_provider.get_llm())
     generator = QuestionsGenerator(chains)
     evaluator = Evaluator(chains)
+    
+    
     return whisper, generator, evaluator
 
 whisper, generator, evaluator = load_models()

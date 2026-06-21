@@ -3,8 +3,8 @@ from llm import build_chains
 from llm.llm_interface import LLmInterface
 
 class Evaluator:
-    def __init__(self, llm_provider: LLmInterface ):
-        self.chains = build_chains(llm_provider)
+    def __init__(self, chains:dict ):
+        self.chains = chains
 
     def check_relevance(self, question: str, answer: str) -> dict:
         return self.chains["relevance"].invoke({"question": question, "answer": answer})
