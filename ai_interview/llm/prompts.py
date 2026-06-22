@@ -129,21 +129,12 @@ Return JSON:
 
 
 
-
-question_prompt = PromptTemplate(
-    input_variables=["role", "description"],
-    template="""
-You are a technical interviewer.
-
-Generate one technical interview question based on:
-
+question_prompt = ChatPromptTemplate.from_template("""
 Role: {role}
+Skills: {description}
 
-Job Description:
-{description}
-
-Return only the question.
-"""
-)
-
+One interview question.
+JSON only:
+{{"question":"..."}}
+""")
 

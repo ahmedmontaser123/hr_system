@@ -1,7 +1,6 @@
 # interview/interview_session.py
 from audio.speech_to_text import WhisperLoader
-from llm import QuestionsGenerator
-from llm import Evaluator
+from llm import QuestionsGenerator, Evaluator
 
 class InterviewSession:
     def __init__(self, whisper: WhisperLoader, generator: QuestionsGenerator, evaluator: Evaluator):
@@ -9,16 +8,7 @@ class InterviewSession:
         self.generator = generator
         self.evaluator = evaluator
 
-    def start(self, role: str, description: str, num_questions: int = 5):
-        """يتكال مرة واحدة في الأول — بيولد الأسئلة"""
-        questions = []
-        for _ in range(num_questions):
-            question = self.generator.generate(role, description)
-            questions.append(question)
-        return questions
-
     def answer(self, question: str, audio_bytes: bytes) -> dict:
-        """بياخد audio ويرجع التقييم"""
         transcript = self.whisper.transcribe(audio_bytes)
         evaluation = self.evaluator.process(question, transcript)
         return {
@@ -28,9 +18,8 @@ class InterviewSession:
         }
 
     def finish(self, results: list) -> dict:
-        """summary"""
         evaluated = [r for r in results if r["evaluation"]["status"] == "evaluated"]
-        
+
         if not evaluated:
             return {"final_score": 0, "summary": "No valid answers"}
 

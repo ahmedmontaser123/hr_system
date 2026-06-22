@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     LLM_MODEL_NAME: str 
     LLM_MAX_NEW_TOKENS:int = 250
     LLM_TEMPERATURE: float = 0.6
+    OLLAMA_MODEL:str
 
     class Config:
         env_file = ".env" 

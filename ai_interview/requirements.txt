@@ -1,11 +1,12 @@
-streamlit==1.37.1
-langchain==0.2.16
-langchain-core==0.2.38
-langchain-community==0.2.16
+streamlit==1.58.0
+langchain==0.3.25
+langchain-core==0.3.63
+langchain-community==0.3.23
+langchain-huggingface==0.1.2
+langchain-ollama==0.2.3
 transformers==4.44.2
 accelerate==0.34.2
 faster-whisper==1.0.3
-pydantic==2.8.2
 pydantic-settings==2.4.0
 python-dotenv==1.0.1
 pandas==2.2.2
