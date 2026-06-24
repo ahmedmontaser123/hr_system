@@ -1,39 +1,111 @@
-# interview/interview_session.py
 from audio.speech_to_text import WhisperLoader
-from llm import QuestionsGenerator, Evaluator
+from llm import QuestionsGenerator, Evaluator,ClassficationQuestion
+
 
 class InterviewSession:
-    def __init__(self, whisper: WhisperLoader, generator: QuestionsGenerator, evaluator: Evaluator):
+    def __init__(
+        self,
+        whisper: WhisperLoader,
+        generator: QuestionsGenerator,
+        classfier: ClassficationQuestion,
+        evaluator: Evaluator
+    ):
         self.whisper = whisper
         self.generator = generator
+        self.classfier = classfier
         self.evaluator = evaluator
 
-    def answer(self, question: str, audio_bytes: bytes) -> dict:
-        transcript = self.whisper.transcribe(audio_bytes)
-        evaluation = self.evaluator.process(question, transcript)
+        self.current_question = None
+        self.current_category = None
+
+    # =========================
+    # 1. Generate Question
+    # =========================
+    def generate_question(self, role: str, skills: str) -> dict:
+        result = self.generator.generate(role=role, description=skills)
+        self.current_question = result
+        return result
+    
+    def classfied_question(self):
+        result = self.classfier.classify(self.current_question)
+        self.current_category = result
+
+        return result
+
+
+        
+
+    def evaluate_answer(self, audio_bytes: bytes, suffix: str = ".wav") -> dict:
+
+        if not self.current_question:
+            return {
+                "status": "error",
+                "message": "No active question"
+            }
+
+        try:
+            transcript = self.whisper.transcribe(audio_bytes, suffix)
+        except Exception as e:
+            return {
+                "question": self.current_question,
+                "transcript": "",
+                "evaluation": {
+                    "status": "error",
+                    "message": f"Audio transcription failed: {str(e)}"
+                }
+            }
+
+        if not transcript or len(transcript.split()) < 3:
+            return {
+                "question": self.current_question,
+                "transcript": transcript,
+                "evaluation": {
+                    "status": "invalid_answer",
+                    "message": "Answer too short"
+                }
+            }
+
+        evaluation = self.evaluator.evaluate_answer(
+            question=self.current_question,
+            category=self.current_category,
+            answer=transcript
+            )
         return {
-            "question": question,
+            "question": self.current_question,
+            "category": self.current_category,
             "transcript": transcript,
             "evaluation": evaluation
         }
+    
+
 
     def finish(self, results: list) -> dict:
-        evaluated = [r for r in results if r["evaluation"]["status"] == "evaluated"]
+        evaluated = [
+         r for r in results
+         if r["evaluation"]["status"] == "evaluated"
+         ]
 
         if not evaluated:
-            return {"final_score": 0, "summary": "No valid answers"}
+            return {
+            "total_questions": len(results),
+            "evaluated": 0,
+            "final_score": 0,
+            "summary": "No valid answers were evaluated"
+             }
 
-        scores = []
-        for r in evaluated:
-            ev = r["evaluation"]["evaluation"]
-            score = sum(v for v in ev.values() if isinstance(v, (int, float)))
-            scores.append(score)
+        scores = [
+        r["evaluation"]["evaluation"]["score"]
+        for r in evaluated
+        ]
 
-        avg = sum(scores) / len(scores)
+        final_score = round(sum(scores) / len(scores), 2)
 
         return {
-            "total_questions": len(results),
-            "evaluated": len(evaluated),
-            "final_score": round(avg, 2),
-            "results": results
-        }
+        "total_questions": len(results),
+        "evaluated": len(evaluated),
+        "final_score": f"{final_score}/10",  # ← أوضح للمستخدم
+        "results": results
+    }
+    
+
+

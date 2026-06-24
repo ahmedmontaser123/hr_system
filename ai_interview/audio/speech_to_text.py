@@ -32,4 +32,5 @@ class WhisperLoader:
             segments, _ = model.transcribe(tmp_path)
             return " ".join(segment.text for segment in segments)
         finally:
-            os.remove(tmp_path)
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
