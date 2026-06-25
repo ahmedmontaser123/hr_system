@@ -17,13 +17,19 @@ class InterviewSession:
 
         self.current_question = None
         self.current_category = None
+        self.question_history: list[str] = []
 
     # =========================
     # 1. Generate Question
     # =========================
-    def generate_question(self, role: str, skills: str) -> dict:
-        result = self.generator.generate(role=role, description=skills)
+    def generate_question(self, role: str, skills: str) -> str:
+        result = self.generator.generate(
+            role=role,
+            description=skills,
+            previous_questions=self.question_history
+        )
         self.current_question = result
+        self.question_history.append(result)
         return result
     
     def classfied_question(self):

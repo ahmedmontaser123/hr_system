@@ -16,12 +16,17 @@ Rules:
 - Avoid trivia or vague questions
 - The question must be realistic in a real interview setting
 - Difficulty must be medium by default
+- Do NOT repeat or generate a question similar to any of the previous questions
+- Ask about concepts and understanding only, NOT about writing actual implementation code
 
 Role:
 {role}
 
 Skills:
 {description}
+
+Previous questions (DO NOT repeat these):
+{previous_questions}
 
 Return ONLY valid JSON:
 
