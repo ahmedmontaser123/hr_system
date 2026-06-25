@@ -1,5 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
+from schemas import EvaluationSchema
 
 question_prompt = ChatPromptTemplate.from_template("""
 You are a senior technical interviewer.
@@ -53,29 +55,9 @@ Return ONLY valid JSON with one of these exact values:
 {{"category": "behavioral"}}
 """)
 
-evaluator_prompt = ChatPromptTemplate.from_template("""
-You are a strict senior interview evaluator.
 
-You MUST evaluate fairly and consistently.
-
-Inputs:
-- Question
-- Answer
-- Category
-
-Evaluation Rules:
-- Do NOT be overly generous
-- Do NOT assume missing information
-- Penalize vague or generic answers
-- Reward clarity, correctness, and depth
-- If answer is wrong, score must be low (≤4)
-- If answer is partially correct, score 5-7
-- If excellent, score 8-10
-
-Category-specific logic:
-- technical → correctness, depth, accuracy
-- problem_solving → logic, structure, efficiency
-- behavioral → clarity, communication, realism
+template_message = """
+"You are a strict interview evaluator.
 
 Question:
 {question}
@@ -86,11 +68,23 @@ Answer:
 Category:
 {category}
 
-Return ONLY valid JSON:
+Rules:
+- Be fair.
+- Penalize vague answers.
+- Reward accuracy.
 
-{{
-  "score": 0-10,
-  "feedback": "Short but precise explanation of strengths and weaknesses"
-}}
-""")
+Output format:
+{format_instructions}
+"""
+evaluation_parser = PydanticOutputParser(pydantic_object=EvaluationSchema)
+evaluation_prompt = PromptTemplate(
+    template=template_message,
+    input_variables=["question", "answer", "category"],
+    partial_variables={"format_instructions": evaluation_parser.get_format_instructions()},
+
+    
+)
+
+
+
 

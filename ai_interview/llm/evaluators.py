@@ -16,19 +16,17 @@ class Evaluator:
 
         if result is None:
             return {
-                "status": "evaluated",
-                "evaluation": {
-                    "score": 5,
-                    "feedback": "Your answer was received but could not be fully evaluated. Consider providing more specific details and examples in your response."
-                }
+                "score":0,
+                "feedback": "there is a problem or issue"
             }
-
+        
         return {
-            "status": "evaluated",
-            "evaluation": {
-                "score": result.score,
-                "feedback": result.feedback
-            }
+
+            "score": result.score,
+            "feedback": result.feedback
         }
 
-      
+
+
+
+        

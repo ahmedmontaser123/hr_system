@@ -79,22 +79,21 @@ elif st.session_state.phase == "answering" and question:
         with st.spinner("Transcribing and evaluating..."):
             result = st.session_state.session.evaluate_answer(audio_bytes)
 
-        status = result["evaluation"]["status"]
-
-        if status == "evaluated":
+        evaluation = result.get("evaluation", {})
+        if "score" in evaluation:
             st.success("Answer evaluated")
             col1, col2 = st.columns(2)
-            col1.metric("Score", f"{result['evaluation']['evaluation']['score']}/10")
+            col1.metric("Score", f"{evaluation['score']}/10")
             col2.metric("Transcript length", f"{len(result['transcript'].split())} words")
             st.markdown(f"**Transcript:** {result['transcript']}")
-            st.markdown(f"**Feedback:** {result['evaluation']['evaluation']['feedback']}")
+            st.markdown(f"**Feedback:** {evaluation['feedback']}")
             st.session_state.results.append(result)
             st.session_state.phase = "done"
             st.rerun()
-        elif status == "invalid_answer":
+        elif evaluation.get("status") == "invalid_answer":
             st.warning("Answer too short. Please provide a more detailed answer.")
         else:
-            st.error(f"Error: {result['evaluation'].get('message', 'Unknown error')}")
+            st.error(f"Error: {evaluation.get('message', 'Unknown error')}")
 
 elif st.session_state.phase == "done":
     st.success("Answer recorded!")
@@ -118,8 +117,8 @@ if st.session_state.phase == "summary":
                 st.markdown(f"**Question:** {r['question']}")
                 st.markdown(f"**Category:** {r.get('category', 'N/A')}")
                 st.markdown(f"**Transcript:** {r.get('transcript', 'N/A')}")
-                if r["evaluation"]["status"] == "evaluated":
-                    ev = r["evaluation"]["evaluation"]
+                ev = r.get("evaluation", {})
+                if "score" in ev:
                     st.markdown(f"**Score:** {ev['score']}/10")
                     st.markdown(f"**Feedback:** {ev['feedback']}")
 

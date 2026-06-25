@@ -82,7 +82,7 @@ class InterviewSession:
     def finish(self, results: list) -> dict:
         evaluated = [
          r for r in results
-         if r["evaluation"]["status"] == "evaluated"
+         if "score" in r.get("evaluation", {})
          ]
 
         if not evaluated:
@@ -94,7 +94,7 @@ class InterviewSession:
              }
 
         scores = [
-        r["evaluation"]["evaluation"]["score"]
+        r["evaluation"]["score"]
         for r in evaluated
         ]
 
