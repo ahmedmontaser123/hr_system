@@ -1,9 +1,9 @@
-from llm.llm_interface import LLmInterface 
+from llm.llm_interface import LLMInterface
 from langchain_huggingface import HuggingFacePipeline
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from helpers import Settings
 
-class HuggingFaceProvider(LLmInterface ):
+class HuggingFaceProvider(LLMInterface):
     def __init__(self, settings: Settings):
         self.model_id = settings.LLM_MODEL_NAME
         self.llm = self._load()

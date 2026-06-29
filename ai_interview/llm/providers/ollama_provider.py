@@ -1,8 +1,8 @@
 ﻿from langchain_ollama import ChatOllama
-from llm.llm_interface import LLmInterface
+from llm.llm_interface import LLMInterface
 from helpers import Settings
 
-class OllamaProvider(LLmInterface):
+class OllamaProvider(LLMInterface):
     def __init__(self, settings: Settings):
         self.model_name = settings.OLLAMA_MODEL
         self.max_tokens = settings.LLM_MAX_NEW_TOKENS

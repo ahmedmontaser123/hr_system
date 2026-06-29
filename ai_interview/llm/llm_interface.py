@@ -1,7 +1,12 @@
 from abc import ABC , abstractmethod
 
 
-class LLmInterface(ABC):
+class LLMInterface(ABC):
+
+    @abstractmethod
+    def _load(self):
+        pass
+
 
     @abstractmethod
     def get_llm(self):

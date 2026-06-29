@@ -1,6 +1,5 @@
 # ai/evaluators.py
 from .chains import Chains
-from llm.llm_interface import LLmInterface
 
 class Evaluator:
     def __init__(self, chains:Chains ):

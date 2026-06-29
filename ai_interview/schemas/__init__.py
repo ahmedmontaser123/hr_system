@@ -1,3 +1,3 @@
 from .question_schema import QuestionSchema
-from .classfication_schema import ClassificationSchema
-from .evaluator_schema import EvaluationSchema
+from .classification_schema import ClassificationSchema
+from .evaluation_schema import EvaluationSchema

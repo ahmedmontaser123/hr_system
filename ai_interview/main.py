@@ -1,9 +1,9 @@
 import streamlit as st
 from helpers import get_settings
-from llm import QuestionsGenerator, Evaluator, ClassficationQuestion
+from llm import QuestionsGenerator, Evaluator, ClassificationQuestion, Transcript
 from llm.providers.ollama_provider import OllamaProvider
+from llm.providers.faster_whisper_provider import WhisperLoader
 from llm.chains import Chains
-from audio.speech_to_text import WhisperLoader
 from interview import InterviewSession
 from audio_recorder_streamlit import audio_recorder
 
@@ -20,7 +20,7 @@ def load_llm():
 
 @st.cache_resource
 def load_whisper():
-    return WhisperLoader(settings)
+    return Transcript(WhisperLoader(settings))
 
 
 llm = load_llm()
@@ -29,9 +29,9 @@ chains = Chains(llm)
 
 if "session" not in st.session_state:
     st.session_state.session = InterviewSession(
-        whisper=whisper,
+        transcript=whisper,
         generator=QuestionsGenerator(chains),
-        classfier=ClassficationQuestion(chains),
+        classifier=ClassificationQuestion(chains),
         evaluator=Evaluator(chains),
     )
     st.session_state.results = []
@@ -48,7 +48,7 @@ with st.sidebar:
     if st.button("Generate Question", use_container_width=True):
         with st.spinner("Generating question..."):
             st.session_state.session.generate_question(role, skills)
-            st.session_state.session.classfied_question()
+            st.session_state.session.classify_current_question()
             st.session_state.phase = "answering"
             st.session_state.recording_id += 1
             st.rerun()

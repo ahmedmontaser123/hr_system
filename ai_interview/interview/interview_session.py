@@ -1,18 +1,18 @@
-from audio.speech_to_text import WhisperLoader
-from llm import QuestionsGenerator, Evaluator,ClassficationQuestion
+from llm.transcript import Transcript
+from llm import QuestionsGenerator, Evaluator, ClassificationQuestion
 
 
 class InterviewSession:
     def __init__(
         self,
-        whisper: WhisperLoader,
+        transcript: Transcript,
         generator: QuestionsGenerator,
-        classfier: ClassficationQuestion,
+        classifier: ClassificationQuestion,
         evaluator: Evaluator
     ):
-        self.whisper = whisper
+        self.transcript = transcript
         self.generator = generator
-        self.classfier = classfier
+        self.classifier = classifier
         self.evaluator = evaluator
 
         self.current_question = None
@@ -32,8 +32,8 @@ class InterviewSession:
         self.question_history.append(result)
         return result
     
-    def classfied_question(self):
-        result = self.classfier.classify(self.current_question)
+    def classify_current_question(self):
+        result = self.classifier.classify(self.current_question)
         self.current_category = result
 
         return result
@@ -50,7 +50,7 @@ class InterviewSession:
             }
 
         try:
-            transcript = self.whisper.transcribe(audio_bytes, suffix)
+            transcript = self.transcript.transcribe(audio_bytes, suffix)
         except Exception as e:
             return {
                 "question": self.current_question,

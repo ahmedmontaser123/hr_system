@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     APP_NAME: str
     APP_VERSION: str
-    FILE_EXTENTION: list
+    FILE_EXTENSION: list
     FILE_SIZE: int
     MODEL_TYPE: str
     DEVICE: str

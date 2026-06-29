@@ -1,5 +1,4 @@
 # ai/questions_generator.py
-from llm.llm_interface import LLmInterface 
 from .chains import Chains
 
 class QuestionsGenerator:
