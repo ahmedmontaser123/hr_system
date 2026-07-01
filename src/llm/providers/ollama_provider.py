@@ -4,6 +4,7 @@ from helpers import Settings
 
 class OllamaProvider(LLMInterface):
     def __init__(self, settings: Settings):
+        self.settings = settings
         self.model_name = settings.OLLAMA_MODEL
         self.max_tokens = settings.LLM_MAX_NEW_TOKENS
         self.temperature = settings.LLM_TEMPERATURE
@@ -14,6 +15,7 @@ class OllamaProvider(LLMInterface):
             model=self.model_name,
             temperature=self.temperature,
             num_predict=self.max_tokens,
+            timeout=self.settings.LLM_TIMEOUT,
         )
 
     def get_llm(self):

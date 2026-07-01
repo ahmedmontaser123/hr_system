@@ -1,129 +1,151 @@
-import streamlit as st
+import struct
+import sys
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from helpers import get_settings
-from llm import QuestionsGenerator, Evaluator, ClassificationQuestion, Transcript
-from llm.providers.ollama_provider import OllamaProvider
-from llm.providers.faster_whisper_provider import WhisperLoader
 from llm.chains import Chains
-from interview import InterviewSession
-from audio_recorder_streamlit import audio_recorder
-
-st.set_page_config(page_title="AI Interview", layout="centered")
-
-settings = get_settings()
+from llm import QuestionsGenerator, Evaluator, ClassificationQuestion, Transcript
+from routers.sessions import router
 
 
-@st.cache_resource
-def load_llm():
+def _generate_silence_wav(duration_sec: float = 0.5, sample_rate: int = 16000) -> bytes:
+    num_samples = int(sample_rate * duration_sec)
+    data_size = num_samples * 2
+    file_size = 36 + data_size
+    header = struct.pack(
+        '<4sI4s4sIHHIIHH4sI',
+        b'RIFF', file_size, b'WAVE',
+        b'fmt ', 16, 1, 1, sample_rate,
+        sample_rate * 2, 2, 16,
+        b'data', data_size,
+    )
+    samples = struct.pack(f'<{num_samples}h', *([0] * num_samples))
+    return header + samples
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+
+    from llm.providers.ollama_provider import OllamaProvider
     provider = OllamaProvider(settings)
-    return provider.get_llm()
+
+    from llm.providers.faster_whisper_provider import WhisperLoader
+    chains = Chains(provider.get_llm())
+    whisper = WhisperLoader(settings)
+    transcript = Transcript(whisper)
+
+    app = FastAPI(title=settings.APP_NAME, version=settings.APP_VERSION)
+    app.state.sessions = {}
+    app.state.chains = chains
+    app.state.transcript = transcript
+    app.include_router(router)
+    return app
 
 
-@st.cache_resource
-def load_whisper():
-    return Transcript(WhisperLoader(settings))
+def test_endpoints():
+    print("\n=== Creating FastAPI app (loading models, this may take a while) ===\n")
+    try:
+        app = create_app()
+    except Exception as e:
+        print(f"Failed to create app: {e}")
+        sys.exit(1)
 
+    client = TestClient(app)
+    base = "/sessions"
+    passed = 0
+    failed = 0
 
-llm = load_llm()
-whisper = load_whisper()
-chains = Chains(llm)
-
-if "session" not in st.session_state:
-    st.session_state.session = InterviewSession(
-        transcript=whisper,
-        generator=QuestionsGenerator(chains),
-        classifier=ClassificationQuestion(chains),
-        evaluator=Evaluator(chains),
-    )
-    st.session_state.results = []
-    st.session_state.phase = "setup"
-    st.session_state.recording_id = 0
-
-st.title("AI Interview")
-
-with st.sidebar:
-    st.header("Configuration")
-    role = st.text_input("Role", value="Software Engineer")
-    skills = st.text_area("Required Skills", value="Python, FastAPI, PostgreSQL")
-
-    if st.button("Generate Question", use_container_width=True):
-        with st.spinner("Generating question..."):
-            st.session_state.session.generate_question(role, skills)
-            st.session_state.session.classify_current_question()
-            st.session_state.phase = "answering"
-            st.session_state.recording_id += 1
-            st.rerun()
-
-    if st.button("Show Summary", use_container_width=True, type="primary"):
-        st.session_state.phase = "summary"
-        st.rerun()
-
-question = st.session_state.session.current_question
-category = st.session_state.session.current_category
-
-if st.session_state.phase == "setup":
-    st.info("Configure the role and skills, then click **Generate Question**.")
-
-elif st.session_state.phase == "answering" and question:
-    st.subheader("Question")
-    st.markdown(f"**Category:** `{category}`")
-    st.info(question)
-
-    audio_bytes = audio_recorder(
-        key=f"recorder_{st.session_state.recording_id}",
-        text="Record your answer",
-        recording_color="#e74c3c",
-        neutral_color="#6c757d",
-    )
-
-    if audio_bytes:
-        with st.spinner("Transcribing and evaluating..."):
-            result = st.session_state.session.evaluate_answer(audio_bytes)
-
-        evaluation = result.get("evaluation", {})
-        if "score" in evaluation:
-            st.success("Answer evaluated")
-            col1, col2 = st.columns(2)
-            col1.metric("Score", f"{evaluation['score']}/10")
-            col2.metric("Transcript length", f"{len(result['transcript'].split())} words")
-            st.markdown(f"**Transcript:** {result['transcript']}")
-            st.markdown(f"**Feedback:** {evaluation['feedback']}")
-            st.session_state.results.append(result)
-            st.session_state.phase = "done"
-            st.rerun()
-        elif evaluation.get("status") == "invalid_answer":
-            st.warning("Answer too short. Please provide a more detailed answer.")
+    def check(name: str, status: int, resp, expect_body: bool = True):
+        nonlocal passed, failed
+        ok = resp.status_code == status
+        label = "✅" if ok else "❌"
+        extra = f" (got {resp.status_code})" if not ok else ""
+        print(f"  {label} {name}{extra}")
+        if ok:
+            passed += 1
         else:
-            st.error(f"Error: {evaluation.get('message', 'Unknown error')}")
+            failed += 1
 
-elif st.session_state.phase == "done":
-    st.success("Answer recorded!")
-    if st.button("Next Question", use_container_width=True):
-        st.session_state.session.current_question = None
-        st.session_state.session.current_category = None
-        st.session_state.phase = "setup"
-        st.rerun()
+    # ── 1. POST /sessions → 201 ──
+    resp = client.post(base, json={"role": "Software Engineer", "skills": "Python, FastAPI, SQL"})
+    check("POST /sessions  ->  201", 201, resp)
+    if resp.status_code != 201:
+        print("\nCannot continue – session creation failed")
+        sys.exit(1)
+    sid = resp.json()["id"]
 
-if st.session_state.phase == "summary":
-    st.subheader("Interview Summary")
-    results = st.session_state.results
-    if results:
-        summary = st.session_state.session.finish(results)
-        st.metric("Total Questions", summary["total_questions"])
-        st.metric("Evaluated", summary["evaluated"])
-        st.metric("Final Score", summary["final_score"])
+    # ── 2. GET /sessions/{id} → 200 ──
+    resp = client.get(f"{base}/{sid}")
+    check("GET  /sessions/{{id}}   ->  200", 200, resp)
 
-        for i, r in enumerate(results, 1):
-            with st.expander(f"Q{i}: {r['question'][:80]}..."):
-                st.markdown(f"**Question:** {r['question']}")
-                st.markdown(f"**Category:** {r.get('category', 'N/A')}")
-                st.markdown(f"**Transcript:** {r.get('transcript', 'N/A')}")
-                ev = r.get("evaluation", {})
-                if "score" in ev:
-                    st.markdown(f"**Score:** {ev['score']}/10")
-                    st.markdown(f"**Feedback:** {ev['feedback']}")
+    # ── 3. GET /sessions/{id} → 404 ──
+    resp = client.get(f"{base}/does-not-exist")
+    check("GET  /sessions/{{id}}   ->  404 (no session)", 404, resp)
 
-        if st.button("New Interview", use_container_width=True, type="primary"):
-            st.session_state.clear()
-            st.rerun()
-    else:
-        st.warning("No questions were answered.")
+    # ── 4. DELETE /sessions/{id} → 404 ──
+    resp = client.delete(f"{base}/does-not-exist")
+    check("DEL  /sessions/{{id}}   ->  404 (no session)", 404, resp)
+
+    # ── 5. POST /sessions/{id}/questions → 200 ──
+    print("  ⏳  Generating question (LLM call – may be slow) ...")
+    resp = client.post(f"{base}/{sid}/questions")
+    check("POST /sessions/{{id}}/questions  ->  200", 200, resp)
+
+    # ── 6. GET /sessions/{id}/current-question → 200 ──
+    resp = client.get(f"{base}/{sid}/current-question")
+    check("GET  /sessions/{{id}}/current-question  ->  200", 200, resp)
+
+    # ── 7. GET /sessions/{id}/current-question → 404 (no session) ──
+    resp = client.get(f"{base}/does-not-exist/current-question")
+    check("GET  /sessions/{{id}}/current-question  ->  404 (no session)", 404, resp)
+
+    # ── 8. GET /sessions/{id}/current-question → 404 (no question yet) ──
+    # Create a second session but don't generate a question for it
+    resp2 = client.post(base, json={"role": "Data Scientist", "skills": "ML, Python"})
+    sid2 = resp2.json()["id"]
+    resp = client.get(f"{base}/{sid2}/current-question")
+    check("GET  /sessions/{{id}}/current-question  ->  404 (no question)", 404, resp)
+
+    # ── 9. POST /sessions/{id}/answers → 200 ──
+    wav = _generate_silence_wav()
+    resp = client.post(f"{base}/{sid}/answers", content=wav)
+    check("POST /sessions/{{id}}/answers  ->  200", 200, resp)
+
+    # ── 10. POST /sessions/{id}/answers → 404 ──
+    resp = client.post(f"{base}/does-not-exist/answers", content=wav)
+    check("POST /sessions/{{id}}/answers  ->  404 (no session)", 404, resp)
+
+    # ── 11. GET /sessions/{id}/answers → 200 ──
+    resp = client.get(f"{base}/{sid}/answers")
+    check("GET  /sessions/{{id}}/answers  ->  200", 200, resp)
+
+    # ── 12. GET /sessions/{id}/answers → 404 ──
+    resp = client.get(f"{base}/does-not-exist/answers")
+    check("GET  /sessions/{{id}}/answers  ->  404 (no session)", 404, resp)
+
+    # ── 13. GET /sessions/{id}/summary → 200 ──
+    resp = client.get(f"{base}/{sid}/summary")
+    check("GET  /sessions/{{id}}/summary  ->  200", 200, resp)
+
+    # ── 14. GET /sessions/{id}/summary → 404 ──
+    resp = client.get(f"{base}/does-not-exist/summary")
+    check("GET  /sessions/{{id}}/summary  ->  404 (no session)", 404, resp)
+
+    # ── 15. DELETE /sessions/{id} → 204 ──
+    resp = client.delete(f"{base}/{sid}")
+    check("DEL  /sessions/{{id}}         ->  204", 204, resp)
+
+    # ── 16. DELETE /sessions/{id} → 404 (already deleted) ──
+    resp = client.delete(f"{base}/{sid}")
+    check("DEL  /sessions/{{id}}         ->  404 (already deleted)", 404, resp)
+
+    total = passed + failed
+    print(f"\n{'=' * 42}")
+    print(f"  {passed} passed, {failed} failed  |  {total} total")
+    print(f"{'=' * 42}")
+    sys.exit(0 if failed == 0 else 1)
+
+
+if __name__ == "__main__":
+    test_endpoints()
